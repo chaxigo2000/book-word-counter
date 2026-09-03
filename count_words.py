@@ -7,6 +7,8 @@ import glob
 import shutil
 import subprocess
 import tempfile
+import csv
+from collections import Counter
 
 try:
     import ebooklib
@@ -185,6 +187,34 @@ def count_words(text):
     return len(words)
 
 
+def count_word_frequencies(text):
+    """
+    Return a Counter of how often each word appears.
+
+    Uses the same word pattern as count_words() so the total of all
+    frequencies always equals the reported word count. Words are
+    lower-cased, so "The" and "the" are counted together.
+    """
+    words = re.findall(r"\b\w+(?:'\w+)*\b", text)
+    return Counter(word.lower() for word in words)
+
+
+def write_frequency_csv(csv_path, frequencies):
+    """
+    Write one word per line as: word,frequency
+
+    Sorted by frequency (most common first), then alphabetically for ties.
+    Written as UTF-8 with a BOM so Excel opens non-Latin text correctly.
+    """
+    ordered = sorted(frequencies.items(), key=lambda item: (-item[1], item[0]))
+    with open(csv_path, "w", encoding="utf-8-sig", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["word", "frequency"])
+        for word, count in ordered:
+            writer.writerow([word, count])
+    return len(ordered)
+
+
 def main():
     root = tk.Tk()
     root.withdraw()
@@ -260,6 +290,7 @@ def main():
             )
 
     total = count_words(text)
+    frequencies = count_word_frequencies(text)
 
     # Build a summary note
     notes = []
@@ -276,8 +307,23 @@ def main():
 
     note = f"\n({', '.join(notes)})" if notes else ""
 
-    result = f"Word count: {total:,}{note}"
+    result = f"Word count: {total:,}{note}\nUnique words: {len(frequencies):,}"
     print(result)
+
+    # Step 4: save a per-word frequency table
+    base_name = os.path.splitext(os.path.basename(path))[0]
+    csv_path = filedialog.asksaveasfilename(
+        title="Save word frequency table (CSV)",
+        defaultextension=".csv",
+        initialfile=f"{base_name}_wordfreq.csv",
+        filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
+        parent=root,
+    )
+    if csv_path:
+        written = write_frequency_csv(csv_path, frequencies)
+        result += f"\nSaved {written:,} rows to:\n{csv_path}"
+        print(f"Frequency table written to: {csv_path}")
+
     messagebox.showinfo("Word Count", f"{result}\n\n{path}")
 
 
